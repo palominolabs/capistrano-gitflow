@@ -175,6 +175,43 @@ Please make sure you have pulled and pushed all code before deploying:
 
             set :branch, new_production_tag
           end
+
+          desc "Push the approved tag to training. Pass in tag to deploy with '-s tag=staging-YYYY-MM-DD-X-feature'."
+          task :tag_training do
+            promote_to_training_tag = capistrano_configuration[:tag] || last_staging_tag
+
+            unless promote_to_training_tag && promote_to_training_tag =~ /staging-.*/
+              abort "Couldn't find a staging tag to deploy; use '-s tag=staging-YYYY-MM-DD.X'"
+            end
+            unless last_tag_matching(promote_to_training_tag)
+              abort "Staging tag #{promote_to_training_tag} does not exist."
+            end
+
+            promote_to_training_tag =~ /^staging-(.*)$/
+            new_training_tag = "training-#{$1}"
+
+            if new_training_tag == last_training_tag
+              puts "Not re-tagging #{last_training_tag} because it already exists"
+              really_deploy = Capistrano::CLI.ui.ask("Do you really want to deploy #{last_training_tag}? [y/N]").to_url
+
+              exit(1) unless really_deploy =~ /^[Yy]$/
+            else
+              puts "Preparing to promote staging tag '#{promote_to_training_tag}' to '#{new_training_tag}'"
+              unless capistrano_configuration[:tag]
+                really_deploy = Capistrano::CLI.ui.ask("Do you really want to deploy #{new_training_tag}? [y/N]").to_url
+
+                exit(1) unless really_deploy =~ /^[Yy]$/
+              end
+              puts "Promoting staging tag #{promote_to_training_tag} to training as '#{new_training_tag}'"
+              system "git tag -a -m 'tagging current code for deployment to training' #{new_training_tag} #{promote_to_training_tag}"
+            end
+
+            set :branch, new_training_tag
+          end
+
+          def last_training_tag()
+            last_tag_matching('training-*')
+          end
         end
 
         namespace :deploy do
